@@ -63,20 +63,19 @@ def get_transaction(tx_id):
     return res[0] if res else None
 
 # ============================================================
-# INICIALIZAÇÃO SESSION STATE
+# SESSION STATE
 # ============================================================
-if "view_month" not in st.session_state:
-    st.session_state.view_month = date.today()
+if "view_date" not in st.session_state:
+    st.session_state.view_date = date.today()
 if "editing_id" not in st.session_state:
     st.session_state.editing_id = None
 
 # ============================================================
-# PÁGINA PRINCIPAL
+# CONFIGURAÇÃO DA PÁGINA
 # ============================================================
 st.set_page_config(page_title="Financeiro", page_icon="💰", layout="wide")
 st.title("💰 Gerenciador Financeiro")
 
-# Sidebar com navegação principal (abas)
 menu = st.sidebar.radio(
     "Navegação",
     ["📊 Visão Geral", "➕ Nova Transação", "🏷️ Categorias", "📋 Todas", "📈 Totais"],
@@ -84,35 +83,36 @@ menu = st.sidebar.radio(
 )
 
 # ============================================================
-# 1. VISÃO GERAL (aba principal)
+# 1. VISÃO GERAL
 # ============================================================
 if menu == "📊 Visão Geral":
     st.header("📅 Visão Geral")
 
-    # Controles de mês compactos
-    col_mes1, col_mes2, col_mes3 = st.columns([1, 4, 1])
+    # Controles de mês
+    col_mes1, col_mes2, col_mes3 = st.columns([1, 2, 1])
     with col_mes1:
         if st.button("◀", use_container_width=True):
-            st.session_state.view_month = st.session_state.view_month - timedelta(days=30)
+            st.session_state.view_date = st.session_state.view_date - timedelta(days=30)
             st.rerun()
     with col_mes2:
-        novo_mes = st.date_input(
+        # Usa formato DD/MM/YYYY (válido) e extrai mês/ano
+        nova_data = st.date_input(
             "Mês/Ano",
-            value=st.session_state.view_month,
-            format="MM/YYYY",
+            value=st.session_state.view_date,
+            format="DD/MM/YYYY",
             label_visibility="collapsed"
         )
-        st.session_state.view_month = novo_mes.replace(day=1)
+        st.session_state.view_date = nova_data.replace(day=1)
     with col_mes3:
         if st.button("▶", use_container_width=True):
-            st.session_state.view_month = st.session_state.view_month + timedelta(days=30)
+            st.session_state.view_date = st.session_state.view_date + timedelta(days=30)
             st.rerun()
 
-    ano = st.session_state.view_month.year
-    mes = st.session_state.view_month.month
-    nome_mes = st.session_state.view_month.strftime("%B/%Y").capitalize()
+    ano = st.session_state.view_date.year
+    mes = st.session_state.view_date.month
+    nome_mes = st.session_state.view_date.strftime("%B/%Y").capitalize()
 
-    # ====== RESUMO EM CARDS ======
+    # Resumo
     resumo = run_query("""
         SELECT type, COALESCE(SUM(amount), 0) as total
         FROM transactions
@@ -152,10 +152,9 @@ if menu == "📊 Visão Geral":
     else:
         st.success("✓ Todas as transações pagas")
 
-    # ====== LISTA DE TRANSAÇÕES COM AÇÕES ======
+    # Lista de transações
     st.subheader(f"Transações - {nome_mes}")
 
-    # Buscar transações
     transacoes = run_query("""
         SELECT t.id, t.type, COALESCE(c.name, 'Sem Categoria') as categoria,
                t.amount, t.date, t.description, t.status, t.paid_date,
@@ -176,7 +175,6 @@ if menu == "📊 Visão Geral":
         df["Parcela"] = df.apply(lambda x: f"{x['installment_number']}/{x['installments']}" if x['installments'] and x['installments']>0 else "-", axis=1)
         df["Abatido"] = df["deducted_from_balance"].apply(lambda x: "Sim" if x else "Não")
 
-        # Mostrar tabela compacta com scroll
         st.dataframe(
             df[["id", "type", "categoria", "Valor", "Data", "description", "status", "Parcela", "Abatido"]],
             use_container_width=True,
@@ -184,13 +182,11 @@ if menu == "📊 Visão Geral":
             height=300
         )
 
-        # ====== AÇÕES (com layout compacto) ======
+        # Ações
         st.subheader("Ações")
-
-        # Selecionar transação via dropdown
         ids = df["id"].tolist()
         selected_id = st.selectbox(
-            "Selecione o ID da transação",
+            "Selecione o ID",
             ids,
             format_func=lambda x: f"ID {x} - {df[df['id']==x]['description'].iloc[0][:35]}"
         )
@@ -234,7 +230,7 @@ if menu == "📊 Visão Geral":
                 if tx:
                     st.json(dict(tx))
 
-        # ====== FORMULÁRIO DE EDIÇÃO (inline, aparece se editing_id estiver setado) ======
+        # Edição inline
         if st.session_state.editing_id:
             tx = get_transaction(st.session_state.editing_id)
             if tx:
@@ -256,13 +252,6 @@ if menu == "📊 Visão Geral":
                             abatido = st.radio("Abatido", ["Não","Sim"], index=0 if not tx["deducted_from_balance"] else 1, horizontal=True)
                             if tx["installments"] and tx["installments"]>0:
                                 st.info(f"Parcela {tx['installment_number']}/{tx['installments']} (campos restritos)")
-                                # Desabilitar campos de edição de valor, data e descrição
-                                st.markdown("""
-                                <style>
-                                div[data-testid="stNumberInput"] input { background-color: #f0f0f0; }
-                                div[data-testid="stDateInput"] input { background-color: #f0f0f0; }
-                                </style>
-                                """, unsafe_allow_html=True)
                         col_b1, col_b2 = st.columns(2)
                         with col_b1:
                             if st.form_submit_button("💾 Salvar"):
@@ -273,7 +262,6 @@ if menu == "📊 Visão Geral":
                                     new_paid = paid_date if status=="Pago" else None
                                     new_abatido = (abatido=="Sim")
                                     if tx["installments"] and tx["installments"]>0:
-                                        # Só permite alterar status, paid_date, deducted
                                         run_query("""
                                             UPDATE transactions
                                             SET status=%s, paid_date=%s, deducted_from_balance=%s
@@ -296,7 +284,7 @@ if menu == "📊 Visão Geral":
                                 st.session_state.editing_id = None
                                 st.rerun()
 
-        # ====== GRÁFICOS ======
+        # Gráficos
         st.subheader("Gráficos")
         col_g1, col_g2 = st.columns(2)
         with col_g1:
@@ -379,7 +367,7 @@ elif menu == "➕ Nova Transação":
                     st.error(f"Erro: {e}")
 
 # ============================================================
-# 3. GERENCIAR CATEGORIAS
+# 3. CATEGORIAS
 # ============================================================
 elif menu == "🏷️ Categorias":
     st.header("🏷️ Categorias")
@@ -413,7 +401,7 @@ elif menu == "🏷️ Categorias":
             st.info("Nenhuma categoria.")
 
 # ============================================================
-# 4. TODAS AS TRANSAÇÕES (com filtros)
+# 4. TODAS AS TRANSAÇÕES
 # ============================================================
 elif menu == "📋 Todas":
     st.header("📋 Todas as Transações")
@@ -494,7 +482,6 @@ elif menu == "📈 Totais":
     c3.metric(f"Despesas {ano_atual}", fmt_brl(total_desp))
     c4.metric("Saldo Ano", fmt_brl(saldo_ano), delta_color="normal" if saldo_ano>=0 else "inverse")
 
-    # Evolução mensal
     st.subheader("Evolução Mensal")
     evol = run_query("""
         SELECT DATE_TRUNC('month', date) as mes,
