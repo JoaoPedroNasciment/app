@@ -8,6 +8,18 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
+import streamlit as st
+
+# Esconde o menu do Streamlit, header e footer
+hide_streamlit_style = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 # ============================================================
 # CONFIGURAÇÃO DO BANCO
 # ============================================================
